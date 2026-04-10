@@ -1,248 +1,147 @@
-# ros2-face-recognition
+# ros2-system-status-pubsub-display
 
-一个基于 **ROS 2 Python Service** 的人脸检测项目。  
-项目使用 `face_recognition` 和 `OpenCV` 完成人脸位置检测，并通过 **自定义服务接口** 将检测结果返回给客户端，再由客户端进行可视化显示。
+一个基于 ROS 2 的系统状态监控示例项目。
 
-这个项目适合用来练习：
+该项目通过自定义消息发布主机的系统状态信息，包括：
 
-- ROS 2 Python 节点开发
-- ROS 2 Service 通信机制
-- 自定义 `.srv` 接口设计
-- `cv_bridge` 在 ROS 图像消息与 OpenCV 图像之间的转换
-- `face_recognition` 的基础使用
-- OpenCV 图像绘制与显示
+- 主机名
+- CPU 使用率
+- 内存使用率
+- 内存总量
+- 可用内存
+- 网络发送量
+- 网络接收量
+
+随后使用一个基于 Qt 的 C++ 图形界面节点订阅这些消息，并实时显示系统状态。
 
 ---
 
-## 项目功能
+## 项目特点
 
-本项目实现了一个完整的人脸检测服务流程：
-
-1. 客户端读取本地测试图片
-2. 客户端将 OpenCV 图像转换为 ROS 图像消息
-3. 客户端调用 `face_detect` 服务
-4. 服务端接收图像并执行人脸检测
-5. 服务端返回：
-   - 检测到的人脸数量
-   - 检测耗时
-   - 每张人脸的边框坐标
-6. 客户端根据返回坐标在原图上绘制矩形框并显示结果
-
-此外，项目还包含一个独立学习脚本 `learn_face_detect.py`，可用于不经过 ROS 2 通信、直接验证人脸检测功能。
+- 使用 **ROS 2 topic 通信**
+- 使用 **自定义消息类型**
+- 使用 **Python 节点**采集系统状态
+- 使用 **C++ + Qt** 实现可视化显示
+- 适合练习：
+  - ROS 2 自定义 `msg`
+  - ROS 2 Python 发布者节点
+  - ROS 2 C++ 订阅者节点
+  - Qt 与 ROS 2 的简单结合
 
 ---
 
 ## 项目结构
 
 ```text
-ros2-face-recognition/
-├── .gitignore
+ros2-system-status-pubsub-display/
 ├── README.md
 └── src/
-    ├── chapt4_interfaces/
+    ├── status_interfaces/
     │   ├── CMakeLists.txt
     │   ├── package.xml
-    │   └── srv/
-    │       └── FaceDetector.srv
-    └── demo_python_service/
+    │   └── msg/
+    │       └── SystemStatus.msg
+    ├── status_publisher/
+    │   ├── package.xml
+    │   ├── setup.py
+    │   └── status_publisher/
+    │       ├── __init__.py
+    │       └── sys_status_pub.py
+    └── status_display/
+        ├── CMakeLists.txt
         ├── package.xml
-        ├── setup.py
-        ├── setup.cfg
-        ├── resource/
-        │   ├── default.jpg
-        │   └── test1.jpg
-        └── demo_python_service/
-            ├── __init__.py
-            ├── learn_face_detect.py
-            ├── face_detect_node.py
-            └── face_detect_client_node.py
+        ├── LICENSE
+        └── src/
+            ├── hello_qt.cpp
+            └── sys_status_display.cpp
 ````
 
 ---
 
-## 功能包说明
+## 消息定义
 
-### 1. `chapt4_interfaces`
+`status_interfaces/msg/SystemStatus.msg`
 
-该功能包用于定义项目中的自定义服务接口：
+```msg
+builtin_interfaces/Time stamp
+string host_name
+float32 cpu_percent
+float32 memory_percent
+float32 memory_total
+float32 memory_available
+float64 net_sent
+float64 net_recv
+```
+
+字段说明：
+
+* `stamp`：消息时间戳
+* `host_name`：主机名称
+* `cpu_percent`：CPU 使用率
+* `memory_percent`：内存使用率
+* `memory_total`：总内存，单位 MB
+* `memory_available`：可用内存，单位 MB
+* `net_sent`：累计发送流量，单位 MB
+* `net_recv`：累计接收流量，单位 MB
+
+---
+
+## 工作流程
+
+项目运行流程如下：
 
 ```text
-srv/FaceDetector.srv
-```
-
-服务接口包含两部分：
-
-#### Request
-
-* `sensor_msgs/Image image`
-
-#### Response
-
-* `int16 number`：检测到的人脸数量
-* `float32 use_time`：检测耗时
-* `int32[] top`
-* `int32[] right`
-* `int32[] bottom`
-* `int32[] left`
-
-其中四个数组分别用于保存每张人脸边框的坐标。
-
----
-
-### 2. `demo_python_service`
-
-该功能包包含项目的主要 Python 节点与测试资源：
-
-#### `learn_face_detect.py`
-
-一个独立的人脸检测学习脚本，不依赖 ROS 2 的服务通信。
-
-功能：
-
-* 读取 `resource/default.jpg`
-* 使用 `face_recognition.face_locations()` 检测人脸
-* 用 OpenCV 在图像上绘制检测框
-* 弹窗显示检测结果
-
-适合用于先验证：
-
-* `face_recognition` 是否安装成功
-* OpenCV 是否能正常读取和显示图片
-* 人脸检测逻辑本身是否正确
-
----
-
-#### `face_detect_node.py`
-
-服务端节点，节点名为：
-
-```text
-face_detect_node
-```
-
-功能：
-
-* 创建名为 `face_detect` 的服务
-* 接收客户端发送的图像消息
-* 将 ROS 图像消息转换为 OpenCV 图像
-* 使用 `face_recognition` 执行人脸检测
-* 返回检测结果给客户端
-
-当前使用的人脸检测参数为：
-
-```python
-self.number_of_times_to_upsample = 1
-self.model = "hog"
-```
-
-说明：
-
-* `number_of_times_to_upsample = 1`：对图像放大一次后检测，有助于识别较小人脸，但会增加耗时
-* `model = "hog"`：使用 HOG 模型，速度较快，更适合 CPU 环境
-
-额外逻辑：
-
-* 如果客户端请求中没有携带图像数据，服务端会自动使用默认图片：
-  `resource/default.jpg`
-
----
-
-#### `face_detect_client_node.py`
-
-客户端节点，节点名为：
-
-```text
-face_detect_client
-```
-
-功能：
-
-* 创建到 `face_detect` 服务的客户端
-* 读取本地测试图片 `resource/test1.jpg`
-* 将 OpenCV 图像转换成 ROS 图像消息
-* 异步调用服务
-* 接收服务端返回的人脸数量、耗时和边框坐标
-* 在原图中绘制人脸框
-* 显示检测结果
-
-客户端输出示例：
-
-```bash
-Number of faces detected: 1, Time taken: 0.15 seconds
+系统状态采集（Python）
+        ↓
+封装为 SystemStatus 消息
+        ↓
+发布到话题 /sys_status
+        ↓
+C++ 订阅者接收消息
+        ↓
+Qt 界面实时显示数据
 ```
 
 ---
 
-## 系统工作流程
+## 依赖环境
 
-整个项目的数据流如下：
+建议准备以下环境：
 
-```text
-本地图片
-   ↓
-客户端读取图片
-   ↓
-转换为 ROS Image 消息
-   ↓
-调用 face_detect 服务
-   ↓
-服务端接收请求
-   ↓
-转换为 OpenCV 图像
-   ↓
-face_recognition 检测人脸
-   ↓
-返回人数、耗时、坐标
-   ↓
-客户端绘制人脸框
-   ↓
-OpenCV 弹窗显示结果
-```
-
----
-
-## 运行环境
-
-建议环境：
-
-* Ubuntu 22.04
-* ROS 2 Humble
-* Python 3
+* ROS 2
 * colcon
+* Python 3
+* Qt5 Widgets
+* Python 库 `psutil`
 
 ---
 
 ## 依赖安装
 
-### 1. ROS 2 相关依赖
+### 1. 安装 Qt
 
-确保已经正确安装 ROS 2，并能正常使用 `colcon`。
+```bash
+sudo apt update
+sudo apt install qtbase5-dev
+```
 
-### 2. Python 依赖
+### 2. 安装 Python 依赖
 
-本项目核心依赖包括：
-
-* `face_recognition`
-* `opencv-python`
-* `cv_bridge`
-* `ament_index_python`
-* `rclpy`
-
-其中 `face_recognition` 通常依赖 `dlib`，安装时可能需要较完整的编译环境。
-
-如果你使用的是系统 Python，推荐优先确认 ROS 环境与 Python 环境兼容后再安装。
+```bash
+pip install psutil
+```
 
 ---
 
 ## 编译方法
 
-在工作空间根目录执行：
+在 ROS 2 工作空间根目录下执行：
 
 ```bash
-colcon build --packages-select chapt4_interfaces demo_python_service
+colcon build --packages-select status_interfaces status_publisher status_display
 ```
 
-编译完成后加载环境：
+编译完成后：
 
 ```bash
 source install/setup.bash
@@ -252,149 +151,90 @@ source install/setup.bash
 
 ## 运行方法
 
-建议开启两个终端。
+建议开两个终端。
 
-### 终端 1：启动服务端
-
-```bash
-source install/setup.bash
-ros2 run demo_python_service face_detect_node
-```
-
-### 终端 2：启动客户端
+### 终端 1：启动系统状态发布节点
 
 ```bash
 source install/setup.bash
-ros2 run demo_python_service face_detect_client
+ros2 run status_publisher sys_status_pub
 ```
 
-运行后客户端会：
+该节点会周期性采集系统状态，并发布到：
 
-1. 在终端输出检测到的人脸数量和耗时
-2. 弹出 OpenCV 窗口显示带有人脸框的结果图像
+```text
+/sys_status
+```
 
----
-
-## 单独测试学习脚本
-
-如果你只想先测试人脸检测逻辑，不跑 ROS 2 服务通信，可以运行：
+### 终端 2：启动图形显示节点
 
 ```bash
 source install/setup.bash
-ros2 run demo_python_service learn_face_detect
+ros2 run status_display sys_status_display
 ```
 
-该脚本会直接读取默认图片并显示检测结果。
+运行后会弹出 Qt 窗口，实时显示收到的系统状态数据。
 
 ---
 
-## 关键设计说明
+## Qt 测试程序
 
-### 为什么这里使用 Service？
+仓库里还包含一个简单的 Qt 测试程序：
 
-这个项目使用的是 **Service（请求-响应）** 模式，而不是 Topic。
+```bash
+source install/setup.bash
+ros2 run status_display hello_qt
+```
 
-这样设计比较适合当前任务，因为：
-
-* 输入是一张图片，请求具有明确的开始和结束
-* 输出是一次性的检测结果
-* 逻辑上更接近“发一张图，返回一组结果”
-
-如果后续想做连续检测、摄像头实时识别，更适合改成 Topic 或 Action。
+这个程序可以用来确认 Qt 环境是否配置正常。
 
 ---
 
-## 已知特点与注意事项
+## 调试方法
 
-### 1. 客户端显示阶段会阻塞
+你也可以直接查看话题内容：
 
-客户端在显示图像时使用了：
-
-```python
-cv2.waitKey(0)
+```bash
+source install/setup.bash
+ros2 topic echo /sys_status
 ```
 
-这会让程序一直等待键盘输入，因此窗口不关闭时，节点不会自然退出。
-
-### 2. 虽然请求是异步的，但显示仍然可能卡住退出流程
-
-客户端调用服务时使用了异步方式，但 OpenCV 窗口本身仍可能造成阻塞。
-
-### 3. 图片路径依赖包资源安装位置
-
-代码通过：
-
-```python
-get_package_share_directory('demo_python_service')
-```
-
-获取图片路径，因此需要保证 `resource/default.jpg` 和 `resource/test1.jpg` 已随包正确安装。
-
-### 4. `face_recognition` 环境配置可能比较敏感
-
-如果系统中没有正确安装 `dlib` 或 `face_recognition`，程序可能无法运行。
+这样可以先确认发布节点是否正常工作，再检查显示节点。
 
 ---
 
-## 可改进方向
+## 当前实现说明
 
-这个项目已经完成了基础的人脸检测服务流程，后续可以继续扩展：
+### `status_publisher`
 
-### 1. 支持摄像头实时检测
+该包使用 Python 编写，主要逻辑包括：
 
-把当前“读取本地图片”改成：
+* 使用 `psutil` 获取 CPU、内存、网络信息
+* 使用 `platform.node()` 获取主机名
+* 构造 `SystemStatus` 消息
+* 通过 ROS 2 topic 周期性发布
 
-* USB 摄像头输入
-* 视频流检测
-* 订阅 ROS 图像话题
+### `status_display`
 
-### 2. 支持更多检测模型
+该包使用 C++ 编写，主要逻辑包括：
 
-当前使用的是：
-
-```python
-model = "hog"
-```
-
-未来可以尝试：
-
-* `cnn` 模型
-* GPU 加速方案
-
-### 3. 增强错误处理
-
-例如：
-
-* 图片读取失败
-* 服务不可用
-* 返回结果为空
-* OpenCV 窗口异常关闭
-
-### 4. 支持结果保存
-
-除了弹窗显示，还可以把画完框的图片保存到本地。
-
-### 5. 扩展为识别而不仅是检测
-
-当前项目做的是 **face detection**（检测人脸位置），后续可以进一步扩展到：
-
-* 人脸编码
-* 人脸比对
-* 多人身份识别
+* 创建 ROS 2 订阅者
+* 订阅 `/sys_status`
+* 将收到的消息拼接成文本
+* 通过 Qt `QLabel` 显示在窗口中
 
 ---
 
-## 学习价值
+## 可以继续改进的方向
 
-通过这个项目，可以比较完整地练习以下内容：
+这个项目已经完成了基础的发布-订阅-显示流程，后续还可以继续扩展：
 
-* ROS 2 Python 节点编写
-* ROS 2 Service 服务端 / 客户端通信
-* 自定义 `.srv` 接口设计
-* `cv_bridge` 图像格式转换
-* OpenCV 图像绘制与显示
-* `face_recognition` 的基础调用流程
-* 异步回调处理方式
+* 把 `QLabel` 改成更完整的 GUI 布局
+* 增加 CPU / 内存曲线图
+* 增加磁盘使用率监控
+* 增加刷新频率配置参数
+* 支持多主机状态监控
+* 使用 `rqt` 或 `QTableWidget` 做更规范的界面展示
 
 ---
 
